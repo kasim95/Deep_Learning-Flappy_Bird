@@ -153,6 +153,7 @@ class FlappyBird:
             pipemidpos = pipe['x'] + PIPE_WIDTH / 2
             if pipemidpos <= playermidpos < pipemidpos + 4:
                 self.score += 1
+                reward = 1
 
         # playerIndex basex change
         if (self.loopIter + 1) % 3 == 0:

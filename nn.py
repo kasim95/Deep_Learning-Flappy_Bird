@@ -67,8 +67,6 @@ class DeepQNetwork:
 
     def replay(self):
         minibatch = random.sample(self.memory, self.batch_size)
-        # list_state = []
-        # list_target = []
         inputs = np.zeros((self.batch_size, 80, 80, 4))
         targets = np.zeros((self.batch_size, ACTIONS))
         for i in range(len(minibatch)):
