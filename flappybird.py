@@ -1,7 +1,6 @@
 # ---------------------------------------------------------
 # dependencies
 import pygame
-import numpy as np
 import random
 from itertools import cycle
 from pygame.locals import *
