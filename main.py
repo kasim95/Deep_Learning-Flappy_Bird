@@ -20,9 +20,10 @@ def train():
     image_data = cv2.resize(image_data, (80, 80))
     image_data = cv2.cvtColor(image_data, cv2.COLOR_BGR2GRAY)
     ret, x = cv2.threshold(image_data, 1, 255, cv2.THRESH_BINARY)
+    x = x / 255.0
     state = np.stack((x, x, x, x), axis=0)
     state = np.reshape(state, (1, 80, 80, 4))
-    x = np.reshape(x, (1, 80, 80))
+    # x = np.reshape(x, (1, 80, 80))
     while True:
         actions = np.zeros(ACTIONS)
         action_index = 0  # by default set action 0 (do nothing) to 1
@@ -35,9 +36,10 @@ def train():
         image_data_1 = cv2.resize(image_data_1, (80, 80))
         image_data_1 = cv2.cvtColor(image_data_1, cv2.COLOR_BGR2GRAY)
         ret, x_1 = cv2.threshold(image_data_1, 1, 255, cv2.THRESH_BINARY)
+        x_1 = x_1 / 255.0
         state_1 = np.stack((x_1, x_1, x_1, x_1), axis=2)
         state_1 = np.reshape(state_1, (1, 80, 80, 4))
-        x_1 = np.reshape(x_1, (1, 80, 80))
+        # x_1 = np.reshape(x_1, (1, 80, 80))
 
         dqn.remember(state, actions, reward, state_1, terminate)
         print("Timestep: ", counter,
