@@ -11,7 +11,7 @@ def train():
     dqn = DeepQNetwork()
     game = FlappyBird()
     counter = 0
-    observe = 100000
+    observe = 50000
     save_timestep = 10000
 
     first_action = np.zeros(ACTIONS)

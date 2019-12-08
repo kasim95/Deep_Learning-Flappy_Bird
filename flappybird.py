@@ -84,7 +84,7 @@ HITMASKS['player'] = (
 # sprite dimensions
 PLAYER_WIDTH = IMAGES['player'][0].get_width()
 PLAYER_HEIGHT = IMAGES['player'][0].get_height()
-PIPE_WIDTH = IMAGES['pipe'][0].get_height()
+PIPE_WIDTH = IMAGES['pipe'][0].get_width()
 PIPE_HEIGHT = IMAGES['pipe'][0].get_height()
 BACKGROUND_WIDTH = IMAGES['background'].get_width()
 BACKGROUND_HEIGHT = IMAGES['background'].get_height()
@@ -219,11 +219,10 @@ class FlappyBird:
         index = random.randint(0, len(fixed_gapy) - 1)
         gapy = fixed_gapy[index]
         gapy += int(BASEY * 0.2)
-        pipeheight = IMAGES['pipe'][0].get_height()
         pipex = SCREENWIDTH + 10
 
         return [
-            {'x': pipex, 'y': gapy - pipeheight},       # upper pipe
+            {'x': pipex, 'y': gapy - PIPE_HEIGHT},       # upper pipe
             {'x': pipex, 'y': gapy + PIPEGAPSIZE},      # lower pipe
         ]
 
