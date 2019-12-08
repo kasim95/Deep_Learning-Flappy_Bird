@@ -11,6 +11,7 @@ __all__ = [
     'DeepQNetwork',
     'GAME',
     'ACTIONS',
+    'FRAME_PER_ACTION',
 ]
 
 
@@ -54,6 +55,9 @@ class DeepQNetwork:
         model.add(Dense(1600))
         model.add(Activation('relu'))
         model.add(Dense(512))
+        model.add(Activation('relu'))
+        model.add(Dense(ACTIONS))
+        model.add(Activation('relu'))
         adam = Adam(lr=self.learning_rate)
         model.compile(loss='mse', optimizer=adam, metrics=['accuracy'])
         return model
@@ -73,12 +77,21 @@ class DeepQNetwork:
 
     def replay(self):
         minibatch = random.sample(self.memory, self.batch_size)
-        for state, action, reward, next_state, done in minibatch:
+        #for state, action, reward, next_state, done in minibatch:
+        for i in minibatch:
+            state = i['state']
+            action = i['action']
+            reward = i['reward']
+            next_state = i['next_state']
+            done = i['done']
+            print(state.shape)
             target = reward
             if not done:
                 target = reward + self.gamma * np.amax(self.model.predict(next_state)[0])
             target_f = self.model.predict(state)
-            target_f[0][action] = target
+            print(np.array(target_f).shape)
+            print(action)
+            target_f[0][np.argmax(action)] = target
             self.model.fit(state, target_f, epochs=1, verbose=0)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
