@@ -120,7 +120,7 @@ class FlappyBird:
                 'x': SCREENWIDTH, 'y': newpipe1[1]['y']
             },
             {
-                'x': SCREENWIDTH + (SCREENWIDTH / 2), 'y': newpipe1[1]['y']
+                'x': SCREENWIDTH + (SCREENWIDTH / 2), 'y': newpipe2[1]['y']
             },
         ]
 

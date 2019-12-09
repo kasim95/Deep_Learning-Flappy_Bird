@@ -24,9 +24,9 @@ FRAME_PER_ACTION = 1
 class DeepQNetwork:
     def __init__(self):
         self.actions = 2
-        self.memory = deque(maxlen=50000)
+        self.memory = deque(maxlen=10000)
         self.gamma = 0.99
-        self.epsilon = 1.0
+        self.epsilon = 0.1
         self.epsilon_decay = 0.9995
         self.epsilon_min = 0.0001
         self.batch_size = 32
@@ -65,8 +65,77 @@ class DeepQNetwork:
         act_values = self.model.predict(state)
         return np.argmax(act_values[0])
 
+    """
     def replay(self):
         minibatch = random.sample(self.memory, self.batch_size)
+        inputs = np.zeros((self.batch_size, 80, 80, 4))
+        targets = np.zeros((self.batch_size, ACTIONS))
+        for i in range(len(minibatch)):
+            mem = minibatch[i]
+            state = mem['state']
+            action = mem['action']
+            next_state = mem['next_state']
+            reward = mem['reward']
+            terminate = mem['done']
+
+            inputs[i:i + 1] = state
+            # targets[i] = self.model.predict(state)
+            
+            targets[i] = action
+            action_index_ = np.argmax(action)
+            
+            if terminate:
+                targets[i, action_index_] = reward
+            else:
+                targets[i, action_index_] = reward + self.gamma * np.amax(self.model.predict(next_state)[0])
+        self.model.fit(inputs, targets, epochs=10, batch_size=self.batch_size, verbose=0)
+    """
+
+    def replay(self):
+        minibatch = random.sample(self.memory, self.batch_size)
+        inputs = []
+        targets = np.zeros((self.batch_size, ACTIONS))
+        # targets = []
+        for i in range(len(minibatch)):
+            mem = minibatch[i]
+            state = mem['state']
+            action = mem['action']
+            next_state = mem['next_state']
+            reward = mem['reward']
+            terminate = mem['done']
+            targets[i] = self.model.predict(state)[0]
+            q = self.model.predict(next_state)[0]
+            action_index = np.argmax(action)
+            if terminate:
+                targets[i, action_index] = reward
+            else:
+                targets[i, action_index] = reward + self.gamma * np.amax(q)
+            inputs.append(state)
+
+        inputs = np.concatenate(inputs)
+        self.model.fit(inputs, targets, epochs=1, batch_size=self.batch_size, verbose=0)
+
+    def decay_epsilon(self):
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+    def save(self):
+        self.model.save_weights("model.h5")
+        print("Model saved")
+
+    def load(self):
+        self.model.load_weights("model.h5")
+        print("Model loaded")
+
+    def evaluate(self, x, y):
+        return self.model.evaluate(x, y, verbose=0)
+
+    def replay_last_15(self):
+        # minibatch = random.sample(self.memory, self.batch_size)
+        minibatch = []
+        for j in range(15, -1, -1):
+            minibatch.append(self.memory[j]) 
+        minibatch = np.array(minibatch)
         inputs = np.zeros((self.batch_size, 80, 80, 4))
         targets = np.zeros((self.batch_size, ACTIONS))
         for i in range(len(minibatch)):
@@ -86,19 +155,5 @@ class DeepQNetwork:
             else:
                 targets[i, action_index_] = reward + self.gamma * np.amax(self.model.predict(next_state)[0])
 
-        self.model.fit(inputs, targets, epochs=1, batch_size=self.batch_size, verbose=0)
+        self.model.fit(inputs, targets, epochs=10, batch_size=15, verbose=0)
 
-    def decay_epsilon(self):
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
-
-    def save(self):
-        self.model.save_weights("model.h5")
-        print("Model saved")
-
-    def load(self):
-        self.model.load_weights("model.h5")
-        print("Model loaded")
-
-    def evaluate(self, x, y):
-        return self.model.evaluate(x, y, verbose=0)

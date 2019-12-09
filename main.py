@@ -12,11 +12,11 @@ def train():
     # dqn.load()
     game = FlappyBird()
     counter = 0
-    observe = 50000
-    save_timestep = 5000
+    observe = 10000
+    save_timestep = 1000
 
     first_action = np.zeros(ACTIONS)
-    first_action[0] = 1
+    first_action[1] = 1
     image_data, reward, terminate = game.frame_state(first_action)
     image_data = cv2.resize(image_data, (80, 80))
     image_data = cv2.cvtColor(image_data, cv2.COLOR_BGR2GRAY)
@@ -42,10 +42,13 @@ def train():
         state_1 = np.reshape(state_1, (1, 80, 80, 4))
 
         dqn.remember(state, actions, reward, state_1, terminate)
-
         if counter > observe:
-            dqn.replay()
-            dqn.decay_epsilon()
+        	#dqn.replay_last_15()
+        	dqn.replay()
+        	dqn.decay_epsilon()
+        # if reward == 1:
+        # dqn.replay_last_15()
+	    # dqn.save()
         if counter % save_timestep == 0:
             dqn.save()
         print("Timestep: ", counter,
