@@ -25,29 +25,28 @@ class DeepQNetwork:
     def __init__(self):
         self.actions = 2
         self.memory = deque(maxlen=50000)
-        self.gamma = 0.95
-        self.epsilon = 0.1
-        self.epsilon_decay = 0.995
+        self.gamma = 0.99
+        self.epsilon = 1.0
+        self.epsilon_decay = 0.9995
         self.epsilon_min = 0.0001
         self.batch_size = 32
-        self.learning_rate = 1e-4
+        self.learning_rate = 1e-6
         self.model = self.build()
 
     def build(self):
         # Tune layers and parameters for faster learning
         model = Sequential()
-        model.add(Conv2D(filters=32, kernel_size=(8, 8), strides=(2, 2), padding='same', input_shape=(80, 80, 4)))
+        model.add(Conv2D(filters=32, kernel_size=(8, 8), strides=(4, 4), padding='same', input_shape=(80, 80, 4)))
         model.add(Activation('relu'))
-        model.add(MaxPooling2D())
+        # model.add(MaxPooling2D())
         model.add(Conv2D(filters=64, kernel_size=(4, 4), strides=(2, 2), padding='same'))
         model.add(Activation('relu'))
-        model.add(Conv2D(filters=64, kernel_size=(2, 2), strides=(2, 2), padding='same'))
+        model.add(Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), padding='same'))
         model.add(Activation('relu'))
         model.add(Flatten())
         model.add(Dense(512))
         model.add(Activation('relu'))
         model.add(Dense(ACTIONS))
-        model.add(Activation('relu'))
         adam = Adam(lr=self.learning_rate)
         model.compile(loss='mse', optimizer=adam)
         return model
@@ -60,7 +59,8 @@ class DeepQNetwork:
                             'done': done})
 
     def do_action(self, state):
-        if np.random.rand() <= self.epsilon:
+        if random.random() <= self.epsilon:
+            print("Random action")
             return random.randrange(self.actions)
         act_values = self.model.predict(state)
         return np.argmax(act_values[0])
@@ -78,7 +78,8 @@ class DeepQNetwork:
             terminate = mem['done']
 
             inputs[i:i + 1] = state
-            targets[i] = self.model.predict(state)
+            # targets[i] = self.model.predict(state)
+            targets[i] = action
             action_index_ = np.argmax(action)
             if terminate:
                 targets[i, action_index_] = reward
@@ -86,6 +87,8 @@ class DeepQNetwork:
                 targets[i, action_index_] = reward + self.gamma * np.amax(self.model.predict(next_state)[0])
 
         self.model.fit(inputs, targets, epochs=1, batch_size=self.batch_size, verbose=0)
+
+    def decay_epsilon(self):
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 

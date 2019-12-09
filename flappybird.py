@@ -5,6 +5,7 @@ import random
 from itertools import cycle
 from pygame.locals import *
 
+
 # ---------------------------------------------------------
 # module objects
 __all__ = [
@@ -134,7 +135,7 @@ class FlappyBird:
 
     def frame_state(self, ip_actions):
         pygame.event.pump()
-        reward = 0.01
+        reward = 0.1
         terminate = False
 
         if sum(ip_actions) != 1:
@@ -215,7 +216,7 @@ class FlappyBird:
         """returns a randomly generated pipe"""
         # y of gap between upper and lower pipe
         # gapY = random.randrange(0, int(BASEY * 0.6 - PIPEGAPSIZE))
-        fixed_gapy = [30, 40, 50, 60, 70, 80, 90]
+        fixed_gapy = [30, 40, 50, 60, 70, 80]
         index = random.randint(0, len(fixed_gapy) - 1)
         gapy = fixed_gapy[index]
         gapy += int(BASEY * 0.2)
