@@ -22,10 +22,8 @@ def train():
     image_data = cv2.cvtColor(image_data, cv2.COLOR_BGR2GRAY)
     ret, x = cv2.threshold(image_data, 1, 255, cv2.THRESH_BINARY)
     x = x / 255.0
-    x = np.reshape(x, (1, 80, 80, 1))
     state = np.stack((x, x, x, x), axis=2)
     state = np.reshape(state, (1, 80, 80, 4))
-    # x = np.reshape(x, (1, 80, 80))
     while True:
         actions = np.zeros(ACTIONS)
         action_index = 0  # by default set action 0 (do nothing) to 1
@@ -40,7 +38,7 @@ def train():
         ret, x_1 = cv2.threshold(image_data_1, 1, 255, cv2.THRESH_BINARY)
         x_1 = x_1 / 255.0
         x_1 = np.reshape(x_1, (1, 80,80, 1))
-        state_1 = np.stack((x_1, x_1, x_1, x_1), axis=2)
+        state_1 = np.append(x_1, state[:, :, :, :3], axis=3)
         state_1 = np.reshape(state_1, (1, 80, 80, 4))
 
         dqn.remember(state, actions, reward, state_1, terminate)
