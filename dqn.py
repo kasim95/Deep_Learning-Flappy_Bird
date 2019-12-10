@@ -12,10 +12,10 @@ class DQN:
         self.actions = 2
         self.gamma = 0.99
         self.epsilon = 0.0001
-        self.initial_epsilon = 1.0
+        self.initial_epsilon = 0.1
         self.final_epsilon = 0.0001
         self.observe = 50000
-        self.explore = 2000000      # 2000000 gives epsilon decay rate as 5e-7 for initial_epsilon as 1.0
+        self.explore = 2000000      # 2000000 gives epsilon decay rate as 5e-8 for initial_epsilon as 0.1
         self.replay_memory = 50000
         self.save_step = 10000
         self.batch_size = 32
