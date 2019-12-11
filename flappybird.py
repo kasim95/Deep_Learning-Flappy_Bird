@@ -32,6 +32,7 @@ FPS = 30
 SCREENWIDTH = 288
 SCREENHEIGHT = 512
 PIPEGAPSIZE = 100
+#PIPEGAPSIZE = 200
 BASEY = SCREENHEIGHT * 0.79
 
 
@@ -133,28 +134,38 @@ class FlappyBird:
         self.playerFlapAcc = -9  # players speed on flapping
         self.playerFlapped = False  # True when player flaps
 
-    def frame_state(self, ip_actions):
-        pygame.event.pump()
-        reward = 0.1
-        terminate = False
+    def calc_reward(self):
+        self.upperpipes.sort(key=lambda p: p['x'])
+        player_rect = pygame.Rect(self.playerx, self.playery, PLAYER_WIDTH, PLAYER_HEIGHT)
+        next_pipe = None
 
-        if sum(ip_actions) != 1:
-            raise ValueError('Multiple input actions')
+        pipe_width = IMAGES['pipe'][0].get_width()
+
+        for pipe in self.upperpipes:
+            next_pipe = next_pipe or pipe
+
+            if pipe['x'] + pipe_width < player_rect.left:
+                continue  # passed this pipe already, ignore
+
+            next_pipe = pipe
+            break
+
+        r = pygame.Rect(0, next_pipe['y'] + PIPE_HEIGHT + 1, pygame.display.get_surface().get_width(),
+                        PIPEGAPSIZE - 1)
+
+        return 1.0 if r.contains(player_rect) else 0.0, r
+
+    def step_next_frame(self, jump=False, enforce_frame_rate=False):
+        pygame.event.pump()
+        terminate = False
 
         # ip_actions[0] == 1: do nothing
         # ip_actions[1] == 1: flap the bird
-        if ip_actions[1] == 1:
+        # if ip_actions[1] == 1:
+        if jump:
             if self.playery > -2 * PLAYER_HEIGHT:
                 self.playerVelY = self.playerFlapAcc
                 self.playerFlapped = True
-
-        # add score
-        playermidpos = self.playerx + PLAYER_WIDTH / 2
-        for pipe in self.upperpipes:
-            pipemidpos = pipe['x'] + PIPE_WIDTH / 2
-            if pipemidpos <= playermidpos < pipemidpos + 4:
-                self.score += 1
-                reward = 1
 
         # playerIndex basex change
         if (self.loopIter + 1) % 3 == 0:
@@ -192,10 +203,32 @@ class FlappyBird:
         if self.checkcrash(player=player_info, upperpipes=self.upperpipes, lowerpipes=self.lowerpipes):
             terminate = True
             self.__init__()
-            reward = -1
+            reward = -1.0
+            #reward_rect = pygame.Rect(0, 0, 0, 0)
+        else:
+            # todo: see if nn can learn without this little bit of help
+            #reward, reward_rect = self.calc_reward()
+
+            reward = 0.0
+
+            # add score
+            playermidpos = self.playerx + PLAYER_WIDTH / 2
+
+            for pipe in self.upperpipes:
+                pipemidpos = pipe['x'] + PIPE_WIDTH / 2
+                if pipemidpos <= playermidpos < pipemidpos + 4:
+                    self.score += 1
+                    reward = 1.0
+                    break
+
+
 
         # draw sprites
         SCREEN.blit(IMAGES['background'], (0, 0))
+
+        # used for debugging reward zone
+        # if not terminate:
+        #     SCREEN.fill((255, 0, 0), reward_rect)
 
         for uPipe, lPipe in zip(self.upperpipes, self.lowerpipes):
             SCREEN.blit(IMAGES['pipe'][0], (uPipe['x'], uPipe['y']))
@@ -206,25 +239,45 @@ class FlappyBird:
         SCREEN.blit(IMAGES['player'][self.playerIndex], (self.playerx, self.playery))
 
         image_data = pygame.surfarray.array3d(pygame.display.get_surface())
-        pygame.display.update()
-        FPSCLOCK.tick(FPS)
+
+        pygame.display.flip()
+        #pygame.display.update()
+
+        # todo: have caller do this, else game will always run < FPS
+        if enforce_frame_rate:
+            FPSCLOCK.tick(FPS)
 
         return image_data, reward, terminate
+
+    def frame_state_player_only(self):
+        SCREEN.blit(IMAGES['background'], (0, 0))
+        SCREEN.blit(IMAGES['player'][self.playerIndex], (self.playerx, self.playery))
+
+        #pygame.display.flip()
+        image_data = pygame.surfarray.array3d(pygame.display.get_surface())
+
+        return image_data
+
+    @staticmethod
+    def save_encoded_frame(frame, name):
+        s = pygame.surfarray.make_surface(frame)
+        pygame.image.save(s, name)
 
     @staticmethod
     def getrandompipe():
         """returns a randomly generated pipe"""
         # y of gap between upper and lower pipe
-        # gapY = random.randrange(0, int(BASEY * 0.6 - PIPEGAPSIZE))
-        fixed_gapy = [30, 40, 50, 60, 70, 80]
+        #gapY = random.randrange(0, int(BASEY * 0.4 - PIPEGAPSIZE))
+        fixed_gapy = [30, 40, 50, 60, 70, 80, 10]
+
         index = random.randint(0, len(fixed_gapy) - 1)
-        gapy = fixed_gapy[index]
-        gapy += int(BASEY * 0.2)
+        gapY = fixed_gapy[index]
+        #gapY += int(BASEY * 0.2)
         pipex = SCREENWIDTH + 10
 
         return [
-            {'x': pipex, 'y': gapy - PIPE_HEIGHT},       # upper pipe
-            {'x': pipex, 'y': gapy + PIPEGAPSIZE},      # lower pipe
+            {'x': pipex, 'y': gapY - PIPE_HEIGHT},       # upper pipe
+            {'x': pipex, 'y': gapY + PIPEGAPSIZE},      # lower pipe
         ]
 
     @staticmethod
