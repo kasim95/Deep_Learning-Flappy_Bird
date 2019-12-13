@@ -207,9 +207,9 @@ class FlappyBird:
             #reward_rect = pygame.Rect(0, 0, 0, 0)
         else:
             # todo: see if nn can learn without this little bit of help
-            #reward, reward_rect = self.calc_reward()
+            reward, reward_rect = self.calc_reward()
 
-            reward = 0.0
+            #reward = 0.0
 
             # add score
             playermidpos = self.playerx + PLAYER_WIDTH / 2
@@ -219,6 +219,8 @@ class FlappyBird:
                 if pipemidpos <= playermidpos < pipemidpos + 4:
                     self.score += 1
                     reward = 1.0
+                    print('*** point ***')
+
                     break
 
 
@@ -239,6 +241,7 @@ class FlappyBird:
         SCREEN.blit(IMAGES['player'][self.playerIndex], (self.playerx, self.playery))
 
         image_data = pygame.surfarray.array3d(pygame.display.get_surface())
+        #image_data = pygame.surfarray.array2d(pygame.display.get_surface())
 
         pygame.display.flip()
         #pygame.display.update()
@@ -260,6 +263,20 @@ class FlappyBird:
 
     @staticmethod
     def save_encoded_frame(frame, name):
+        assert frame is not None
+        assert name is not None
+
+        num_channels = frame.shape[-1:]
+
+        if type(num_channels) is not tuple:
+            num_channels = (num_channels,)
+
+        if num_channels[0] > 3:
+            frame = frame[:, :, None].repeat(3, axis=2)
+        elif num_channels[0] != 1 and num_channels[0] != 3:
+            print('frame must have 1 or 3 color channels')
+            raise RuntimeError
+
         s = pygame.surfarray.make_surface(frame)
         pygame.image.save(s, name)
 
@@ -268,8 +285,9 @@ class FlappyBird:
         """returns a randomly generated pipe"""
         # y of gap between upper and lower pipe
         #gapY = random.randrange(0, int(BASEY * 0.4 - PIPEGAPSIZE))
-        fixed_gapy = [30, 40, 50, 60, 70, 80, 10]
-
+        #fixed_gapy = [30, 40, 50, 60, 70, 80]
+        fixed_gapy = [70, 80, 90]
+        
         index = random.randint(0, len(fixed_gapy) - 1)
         gapY = fixed_gapy[index]
         #gapY += int(BASEY * 0.2)
