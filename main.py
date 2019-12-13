@@ -38,11 +38,11 @@ def train():
     dqn = DeepQNetwork(
         input_shape=(80, 80, 4),  # channels last
         num_actions=2,
-        num_history=15000,
+        num_history=5000,
         frame_stack_depth=4,
         batch_size=32,
-        learning_rate=0.001,
-        initial_epsilon=0.25,
+        learning_rate=0.0001,
+        initial_epsilon=0.1,
         epsilon_decay=0.98
     )
 

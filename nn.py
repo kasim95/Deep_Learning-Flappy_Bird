@@ -34,7 +34,7 @@ class DeepQNetwork:
                  batch_size,
                  learning_rate,
                  initial_epsilon=1.0,
-                 min_epsilon=0.0001, epsilon_decay=0.95):
+                 min_epsilon=0.0001, epsilon_decay=0.95, update_network_epochs=500):
         self.actions = num_actions
         self.memory = deque(maxlen=num_history)
         self.gamma = 0.99
@@ -47,6 +47,11 @@ class DeepQNetwork:
         self.input_shape = input_shape
 
         self.model = self.build()
+        self.target_network = self.build()
+        self.update_network_epochs = update_network_epochs
+        self.current_epoch = 0
+
+        self.dlayer = self.model.get_layer('dense_layer')
 
     def build(self):
         model = Sequential()
@@ -57,7 +62,7 @@ class DeepQNetwork:
         model.add(Conv2D(filters=32, kernel_size=(4, 4), strides=(2, 2), padding='same'))
         model.add(Activation('relu'))
         model.add(Flatten())
-        model.add(Dense(256))
+        model.add(Dense(256, name='dense_layer'))
         model.add(Activation('relu'))
         model.add(Dense(self.actions, name='q_actions'))
 
@@ -65,7 +70,7 @@ class DeepQNetwork:
         # todo: Huber loss
         #odel.compile(loss=Huber(delta=2), optimizer=RMSprop(learning_rate=self.learning_rate))
         #model = Model(inputs=model_input, outputs=model_output)
-        model.compile(loss='mse', optimizer=RMSprop(learning_rate=self.learning_rate))
+        model.compile(loss='mse', optimizer=RMSprop(learning_rate=self.learning_rate, clipvalue=0.5))
 
         print(f'input shape: {model.input_shape}')
         model.summary()
@@ -105,21 +110,25 @@ class DeepQNetwork:
         y_reality = np.zeros((self.batch_size, self.actions))
 
         for i, memory in enumerate(minibatch):
-            # s_t, a_t, r_t, s_tp1, game_over = batch[i]
-
             state_stack = memory.state
             next_state_stack = self.add_to_frame_stack(memory.next_state, memory.state)
 
             x_prediction[i] = np.divide(memory.state, 255.0)
             next_state_stack = np.divide(next_state_stack, 255.0)
 
-            y_reality[i] = self.model.predict(state_stack)[0]
-            best_q = np.max(self.model.predict(next_state_stack)[0])
+            y_reality[i] = self.target_network.predict(state_stack)[0]
+            best_q = np.max(self.target_network.predict(next_state_stack)[0])
 
             if memory.terminated:
-                y_reality[i, memory.action_index] = memory.reward
+                #y_reality[i, memory.action_index] = memory.reward
+                reward = memory.reward
             else:
-                y_reality[i, memory.action_index] = memory.reward + self.gamma * best_q
+                #y_reality[i, memory.action_index] = memory.reward + self.gamma * best_q
+                reward = memory.reward + self.gamma * best_q
+
+            # clip rewards
+            for j in range(self.actions):
+                y_reality[i, j] = max(1, min(reward, -1.0))
 
         return x_prediction, y_reality
 
@@ -129,9 +138,17 @@ class DeepQNetwork:
 
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
+        self.current_epoch += 1
+        if self.current_epoch % self.update_network_epochs == 0:
+            self.target_network.set_weights(self.model.get_weights())
+            print('target network updated')
+
         x, y = self.create_minibatch()
 
         loss = self.model.train_on_batch(x, y)  # returns loss
+        print(f'loss: {loss}')
+
+        #print(self.dlayer.get_weights())
 
     # def replay(self):
     #     if len(self.memory) < self.batch_size:
@@ -197,6 +214,8 @@ class DeepQNetwork:
 
     def load(self):
         self.model.load_weights("model.h5")
+        self.target_network.set_weights(self.model.get_weights())
+
         print("Model loaded")
 
     def evaluate(self, x, y):
