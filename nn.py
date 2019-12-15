@@ -106,7 +106,6 @@ class DeepQNetwork:
         if random.random() <= self.epsilon:
             return random.randrange(self.actions)
 
-        # state = np.reshape(state, (1, *state.shape))
         act_values = self.model.predict(state)
 
         chosen = np.argmax(act_values[0])

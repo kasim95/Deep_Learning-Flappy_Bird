@@ -95,6 +95,27 @@ BASE_HEIGHT = IMAGES['base'].get_height()
 PLAYER_INDEX_GEN = cycle([0, 1, 2, 1])
 
 
+class Pipe:
+    def __init__(self, gap_center_y):
+        self.x = SCREENWIDTH + 10
+        self.uppery = gap_center_y - PIPEGAPSIZE * 0.5 - PIPE_HEIGHT
+        self.lowery = gap_center_y + PIPEGAPSIZE * 0.5
+        self.gap_center_y = gap_center_y
+        self.upperpipe = IMAGES['pipe'][0]
+        self.lowerpipe = IMAGES['pipe'][1]
+
+    def blit(self, screen):
+        screen.blit(self.upperpipe, (self.x, self.uppery))
+        screen.blit(self.lowerpipe, (self.x, self.lowery))
+
+    @property
+    def upipe_rect(self):
+        return pygame.Rect(self.x, self.uppery, PIPE_WIDTH, PIPE_HEIGHT)
+
+    @property
+    def lpipe_rect(self):
+        return pygame.Rect(self.x, self.lowery, PIPE_WIDTH, PIPE_HEIGHT)
+
 # ---------------------------------------------------------
 # class to keep track of state of game
 class FlappyBird:
@@ -106,24 +127,29 @@ class FlappyBird:
         self.playery = int((SCREENHEIGHT - PLAYER_HEIGHT) / 2)
         self.basex = 0
         self.baseShift = BASE_WIDTH - BACKGROUND_WIDTH
-        newpipe1 = self.getrandompipe()
-        newpipe2 = self.getrandompipe()
-        self.upperpipes = [
-            {
-                'x': SCREENWIDTH, 'y': newpipe1[0]['y']
-            },
-            {
-                'x': SCREENWIDTH + (SCREENWIDTH / 2), 'y': newpipe2[0]['y']
-            },
-        ]
-        self.lowerpipes = [
-            {
-                'x': SCREENWIDTH, 'y': newpipe1[1]['y']
-            },
-            {
-                'x': SCREENWIDTH + (SCREENWIDTH / 2), 'y': newpipe1[1]['y']
-            },
-        ]
+        self.pipes = [self.getrandompipe(), self.getrandompipe()]
+
+        self.pipes[0].x = SCREENWIDTH
+        self.pipes[1].x = SCREENWIDTH * 1.5
+
+        # newpipe1 = self.getrandompipe()
+        # newpipe2 = self.getrandompipe()
+        # self.upperpipes = [
+        #     {
+        #         'x': SCREENWIDTH, 'y': newpipe1[0]['y']
+        #     },
+        #     {
+        #         'x': SCREENWIDTH + (SCREENWIDTH / 2), 'y': newpipe2[0]['y']
+        #     },
+        # ]
+        # self.lowerpipes = [
+        #     {
+        #         'x': SCREENWIDTH, 'y': newpipe1[1]['y']
+        #     },
+        #     {
+        #         'x': SCREENWIDTH + (SCREENWIDTH / 2), 'y': newpipe1[1]['y']
+        #     },
+        # ]
 
         # player velocity, max velocity, downward acceleration, acceleration on flap
         self.pipeVelX = -4
@@ -134,36 +160,14 @@ class FlappyBird:
         self.playerFlapAcc = -9  # players speed on flapping
         self.playerFlapped = False  # True when player flaps
 
-    def calc_reward(self):
-        self.upperpipes.sort(key=lambda p: p['x'])
-        player_rect = pygame.Rect(self.playerx, self.playery, PLAYER_WIDTH, PLAYER_HEIGHT)
-        next_pipe = None
-
-        pipe_width = IMAGES['pipe'][0].get_width()
-
-        for pipe in self.upperpipes:
-            next_pipe = next_pipe or pipe
-
-            if pipe['x'] + pipe_width < player_rect.left:
-                continue  # passed this pipe already, ignore
-
-            next_pipe = pipe
-            break
-
-        r = pygame.Rect(0, next_pipe['y'] + PIPE_HEIGHT + 1, pygame.display.get_surface().get_width(),
-                        PIPEGAPSIZE - 1)
-
-        return 1.0 if r.contains(player_rect) else 0.0, r
-
     def get_next_pipe(self):
-        self.lowerpipes.sort(key=lambda p: p['x'])
+        #self.pipes.sort(key=lambda p: p.x)
         player_rect = pygame.Rect(self.playerx, self.playery, PLAYER_WIDTH, PLAYER_HEIGHT)
 
-        #pipe_width = IMAGES['pipe'][0].get_width()
         pipe_width = PIPE_WIDTH
 
-        for pipe in self.lowerpipes:
-            if pipe['x'] + pipe_width < player_rect.left:
+        for pipe in self.pipes:
+            if pipe.x + pipe_width < player_rect.left:
                 continue  # passed this pipe already, ignore
 
             return pipe
@@ -171,13 +175,10 @@ class FlappyBird:
         return None
 
     def get_next_pipe_gap_y(self):
-        #return self.get_next_pipe()['y'] + PIPE_HEIGHT + PIPEGAPSIZE / 2 # y of center gap
-        #return self.get_next_pipe()['y'] + PIPE_HEIGHT + PIPEGAPSIZE - self.playerMaxVelY - 10
-        #return self.get_next_pipe()['y'] + PIPE_HEIGHT + PIPEGAPSIZE - self.playerMaxVelY - 10
-        return self.get_next_pipe()['y'] - PLAYER_HEIGHT - 1
+        return self.get_next_pipe().gap_center_y
 
     def get_next_pipe_gap_x(self):
-        return self.get_next_pipe()['x']
+        return self.get_next_pipe().x
 
     def get_bird_y(self):
         return self.playery + PLAYER_HEIGHT / 2.
@@ -214,46 +215,67 @@ class FlappyBird:
             self.playery = 0
 
         # moves pipes to left
-        for uPipe, lPipe in zip(self.upperpipes, self.lowerpipes):
-            uPipe['x'] += self.pipeVelX
-            lPipe['x'] += self.pipeVelX
+        for pipe in self.pipes:
+            pipe.x += self.pipeVelX
+
+        # for uPipe, lPipe in zip(self.upperpipes, self.lowerpipes):
+        #     uPipe['x'] += self.pipeVelX
+        #     lPipe['x'] += self.pipeVelX
 
         # add new pipe when first pipe is about to touch left of screen
-        if 0 < self.upperpipes[0]['x'] < 5:
-            newpipe = self.getrandompipe()
-            self.upperpipes.append(newpipe[0])
-            self.lowerpipes.append(newpipe[1])
+        # note: bug in original version: can double-stack pipes if pipe does not move at
+        # least this many units per frame, which in original version it does not
+        if self.pipes:
+            if 0 <= self.pipes[0].x < 5 and self.pipes[-1:][0].x < SCREENWIDTH:
+                newpipe = self.getrandompipe()
+                self.pipes.append(newpipe)
 
-        # remove first pipe if its out of screen
-        if self.upperpipes[0]['x'] < -PIPE_WIDTH:
-            self.upperpipes.pop(0)
-            self.lowerpipes.pop(0)
+            if self.pipes[0].x < -PIPE_WIDTH:
+                self.pipes.pop(0)
+
+        # if 0 < self.upperpipes[0]['x'] < 5:
+        #     newpipe = self.getrandompipe()
+        #     self.upperpipes.append(newpipe[0])
+        #     self.lowerpipes.append(newpipe[1])
+        #
+        # # remove first pipe if its out of screen
+        # if self.upperpipes[0]['x'] < -PIPE_WIDTH:
+        #     self.upperpipes.pop(0)
+        #     self.lowerpipes.pop(0)
 
         # check if crash here
         player_info = {'x': self.playerx, 'y': self.playery, 'index': self.playerIndex}
-        if self.checkcrash(player=player_info, upperpipes=self.upperpipes, lowerpipes=self.lowerpipes):
+        #if self.checkcrash(player=player_info, upperpipes=self.upperpipes, lowerpipes=self.lowerpipes):
+        if self.checkcrash(player=player_info):
             terminate = True
             self.__init__()
-            reward = -10.0
+            #reward = -10.0
             #reward_rect = pygame.Rect(0, 0, 0, 0)
         else:
             # todo: see if nn can learn without this little bit of help
             #reward, reward_rect = self.calc_reward()
 
-            reward = 0.0
+            #reward = 0.0
 
             # add score
             playermidpos = self.playerx + PLAYER_WIDTH / 2
 
-            for pipe in self.upperpipes:
-                pipemidpos = pipe['x'] + PIPE_WIDTH / 2
+            for pipe in self.pipes:
+                pipemidpos = pipe.x + PIPE_WIDTH / 2
                 if pipemidpos <= playermidpos < pipemidpos + 4:
                     self.score += 1
-                    reward = 10
                     print('*** point ***')
 
                     break
 
+            # for pipe in self.upperpipes:
+            #     pipemidpos = pipe['x'] + PIPE_WIDTH / 2
+            #     if pipemidpos <= playermidpos < pipemidpos + 4:
+            #         self.score += 1
+            #         #reward = 10
+            #         print('*** point ***')
+            #
+            #         break
 
 
         # draw sprites
@@ -265,21 +287,28 @@ class FlappyBird:
 
 
 
-        for uPipe, lPipe in zip(self.upperpipes, self.lowerpipes):
-            SCREEN.blit(IMAGES['pipe'][0], (uPipe['x'], uPipe['y']))
-            SCREEN.blit(IMAGES['pipe'][1], (lPipe['x'], lPipe['y']))
+        for pipe in self.pipes:
+            pipe.blit(SCREEN)
+
+        # for uPipe, lPipe in zip(self.upperpipes, self.lowerpipes):
+        #     SCREEN.blit(IMAGES['pipe'][0], (uPipe['x'], uPipe['y']))
+        #     SCREEN.blit(IMAGES['pipe'][1], (lPipe['x'], lPipe['y']))
 
         # y = self.get_next_pipe_gap_y() - PIPEGAPSIZE / 2 # back to top
         # r = pygame.Rect(self.get_next_pipe_gap_x(), y, PIPE_WIDTH, PIPEGAPSIZE)
         # SCREEN.fill((255, 0, 0), r)
 
+        # visualize gap
+        gapr = pygame.Rect(self.get_next_pipe().x, self.get_next_pipe_gap_y() - PIPEGAPSIZE * 0.5, PIPE_WIDTH, PIPEGAPSIZE)
+        SCREEN.fill((0, 120, 0), gapr)
+
         # visualize target line
-        y = self.get_next_pipe_gap_y()
+        y = self.get_next_pipe_gap_y() + PIPEGAPSIZE * 0.5 - PLAYER_HEIGHT
         r = pygame.Rect(self.get_next_pipe_gap_x(), y, PIPE_WIDTH, 4)
         SCREEN.fill((255, 0, 0), r)
 
         # visualize bottom of pipe
-        y = self.get_next_pipe()['y']
+        y = self.get_next_pipe().gap_center_y + PIPEGAPSIZE * 0.5
         r.y = y
         SCREEN.fill((255, 0, 255), r)
 
@@ -297,6 +326,7 @@ class FlappyBird:
         if enforce_frame_rate:
             FPSCLOCK.tick(FPS)
 
+        reward = 0
         return image_data, reward, terminate
 
     def frame_state_player_only(self):
@@ -327,26 +357,36 @@ class FlappyBird:
         s = pygame.surfarray.make_surface(frame)
         pygame.image.save(s, name)
 
-    @staticmethod
-    def getrandompipe():
+    def getrandompipe(self):
         """returns a randomly generated pipe"""
-        # y of gap between upper and lower pipe
-        #gapY = random.randrange(0, int(BASEY * 0.4 - PIPEGAPSIZE))
-        fixed_gapy = [30, 40, 50, 60, 70, 80]
-        #fixed_gapy = [150, 150, 150]
-        
-        index = random.randint(0, len(fixed_gapy) - 1)
-        gapY = fixed_gapy[index]
-        #gapY += int(BASEY * 0.2)
+        # # y of gap between upper and lower pipe
+        # #gapY = random.randrange(0, int(BASEY * 0.4 - PIPEGAPSIZE))
+        # fixed_gapy = [30, 40, 50, 60, 70, 80, 150, 160, 170]
+        # #fixed_gapy = [150, 150, 150]
+        #
+        # index = random.randint(0, len(fixed_gapy) - 1)
+        # gapY = fixed_gapy[index]
+        # gapY += int(BASEY * 0.2)
+        # pipex = SCREENWIDTH + 10
+        #
+        # return [
+        #     {'x': pipex, 'y': gapY - PIPE_HEIGHT},       # upper pipe
+        #     {'x': pipex, 'y': gapY + PIPEGAPSIZE},      # lower pipe
+        # ]
+
+        MIN_Y = 0.1 * SCREENHEIGHT + PIPEGAPSIZE * 0.5
+        MAX_Y = BASEY - 0.1 * SCREENHEIGHT - PIPEGAPSIZE * 0.5
+
+        gapY = random.randrange(0, int(MAX_Y - MIN_Y)) + MIN_Y
         pipex = SCREENWIDTH + 10
 
-        return [
-            {'x': pipex, 'y': gapY - PIPE_HEIGHT},       # upper pipe
-            {'x': pipex, 'y': gapY + PIPEGAPSIZE},      # lower pipe
-        ]
+        if hasattr(self, "pipes") and self.pipes:
+            if abs(self.pipes[-1:][0].x - pipex) < PIPE_WIDTH:
+                print('overlap!')
 
-    @staticmethod
-    def checkcrash(player, upperpipes, lowerpipes):
+        return Pipe(gapY)
+
+    def checkcrash(self, player):
         """returns True if player collders with base or pipes."""
         pi = player['index']
 
@@ -357,10 +397,10 @@ class FlappyBird:
             playerrect = pygame.Rect(player['x'], player['y'],
                                      PLAYER_WIDTH, PLAYER_HEIGHT)
 
-            for upipe, lpipe in zip(upperpipes, lowerpipes):
+            for pipe in self.pipes:
                 # upper and lower pipe rects
-                upiperect = pygame.Rect(upipe['x'], upipe['y'], PIPE_WIDTH, PIPE_HEIGHT)
-                lpiperect = pygame.Rect(lpipe['x'], lpipe['y'], PIPE_WIDTH, PIPE_HEIGHT)
+                upiperect = pipe.upipe_rect
+                lpiperect = pipe.lpipe_rect
 
                 # player and upper/lower pipe hitmasks
                 phitmask = HITMASKS['player'][pi]
@@ -373,6 +413,23 @@ class FlappyBird:
 
                 if ucollide or lcollide:
                     return True
+
+            # for upipe, lpipe in zip(upperpipes, lowerpipes):
+            #     # upper and lower pipe rects
+            #     upiperect = pygame.Rect(upipe['x'], upipe['y'], PIPE_WIDTH, PIPE_HEIGHT)
+            #     lpiperect = pygame.Rect(lpipe['x'], lpipe['y'], PIPE_WIDTH, PIPE_HEIGHT)
+            #
+            #     # player and upper/lower pipe hitmasks
+            #     phitmask = HITMASKS['player'][pi]
+            #     uhitmask = HITMASKS['pipe'][0]
+            #     lhitmask = HITMASKS['pipe'][1]
+            #
+            #     # if bird collided with upipe or lpipe
+            #     ucollide = FlappyBird.pixelcollision(playerrect, upiperect, phitmask, uhitmask)
+            #     lcollide = FlappyBird.pixelcollision(playerrect, lpiperect, phitmask, lhitmask)
+            #
+            #     if ucollide or lcollide:
+            #         return True
         return False
 
     @staticmethod
