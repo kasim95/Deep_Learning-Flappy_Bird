@@ -1,14 +1,14 @@
 from tensorflow.keras.losses import Huber
 from keras.models import Sequential, Input, Model
-from keras.layers import Conv2D, Dense, MaxPooling2D, Activation, Flatten, Dropout, BatchNormalization
+from keras.layers import Conv2D, Dense, MaxPooling2D, Activation, Flatten, Dropout, BatchNormalization, Lambda
 from keras.optimizers import Adam, SGD, RMSprop
 import random
 import numpy as np
 from collections import deque
-import keras
+import keras as K
 import cv2
 
-keras.backend.set_image_data_format('channels_last')
+K.backend.set_image_data_format('channels_last')
 
 __all__ = [
     'DeepQNetwork'
@@ -34,10 +34,11 @@ class DeepQNetwork:
                  batch_size,
                  learning_rate,
                  initial_epsilon=1.0,
-                 min_epsilon=0.0001, epsilon_decay=0.95, update_network_epochs=500):
+                 min_epsilon=0.0001, epsilon_decay=0.95, update_network_epochs=500,
+                 min_reward=-10, max_reward=10):
         self.actions = num_actions
         self.memory = deque(maxlen=num_history)
-        self.gamma = 0.99
+        self.gamma = 0.90
         self.epsilon = initial_epsilon
         self.epsilon_decay = epsilon_decay
         self.epsilon_min = min_epsilon
@@ -45,6 +46,8 @@ class DeepQNetwork:
         self.learning_rate = learning_rate
         self.frame_stack_depth = frame_stack_depth
         self.input_shape = input_shape
+        self.min_reward = min_reward
+        self.max_reward = max_reward
 
         self.model = self.build()
         self.target_network = self.build()
@@ -55,22 +58,29 @@ class DeepQNetwork:
 
     def build(self):
         model = Sequential()
-        model.add(Conv2D(filters=16, kernel_size=(8, 8), strides=(4, 4), padding='same',
+        model.add(Conv2D(filters=32, kernel_size=(8, 8), strides=(4, 4), padding='same',
                          input_shape=self.input_shape))
         #model.add(BatchNormalization())
         model.add(Activation('relu'))
-        model.add(Conv2D(filters=32, kernel_size=(4, 4), strides=(2, 2), padding='same'))
+        model.add(Conv2D(filters=64, kernel_size=(4, 4), strides=(2, 2), padding='same'))
+        model.add(Activation('relu'))
+        model.add(Conv2D(filters=64, kernel_size=(4, 4), strides=(2, 2), padding='same'))
         model.add(Activation('relu'))
         model.add(Flatten())
-        model.add(Dense(256, name='dense_layer'))
+        model.add(Dense(512, name='dense_layer'))
         model.add(Activation('relu'))
-        model.add(Dense(self.actions, name='q_actions'))
+        #model.add(Activation('tanh'))
+        model.add(Dense(self.actions, name='q_actions', activation='linear'))
+        #model.add(Lambda(lambda x: K.backend.cast(x, 'float32')))
+
+        #decoder_outputs = Lambda(lambda x: K.cast(x, 'float32'), name='change_to_float')(decoder_outputs)
 
         # rewards should be clipped to [-1, 1] range for this delta to be correct
         # todo: Huber loss
         #odel.compile(loss=Huber(delta=2), optimizer=RMSprop(learning_rate=self.learning_rate))
         #model = Model(inputs=model_input, outputs=model_output)
-        model.compile(loss='mse', optimizer=RMSprop(learning_rate=self.learning_rate, clipvalue=0.5))
+        #model.compile(loss='mse', optimizer=RMSprop(learning_rate=self.learning_rate, clipvalue=0.5))
+        model.compile(loss='mse', optimizer=Adam(learning_rate=self.learning_rate))
 
         print(f'input shape: {model.input_shape}')
         model.summary()
@@ -80,17 +90,17 @@ class DeepQNetwork:
     def remember(self, state, action, reward, next_frame, done, significant=False):
         self.memory.append(Memory(state, next_frame, action, reward, done))
 
-        # if significant and len(self.memory) > 30:
-        #     # this sequence was actions was especially important, so to increase the odds
-        #     # it is trained, let's duplicate the steps that led to this result
-        #     sequence = deque()
-        #
-        #     for j in range(30):  # recall last 30 frames
-        #         sequence.append(self.memory.pop())
-        #
-        #     for i in range(5):  # duplicate this 4 times (we removed originals and are putting them back now)
-        #         for m in sequence:
-        #             self.memory.append(m)
+        if significant and len(self.memory) > 30:
+            # this sequence was actions was especially important, so to increase the odds
+            # it is trained, let's duplicate the steps that led to this result
+            sequence = deque()
+
+            for j in range(30):  # recall last 30 frames
+                sequence.append(self.memory.pop())
+
+            for i in range(5):  # duplicate this 4 times (we removed originals and are putting them back now)
+                for m in sequence:
+                    self.memory.append(m)
 
     def choose_action(self, state):
         if random.random() <= self.epsilon:
@@ -99,9 +109,15 @@ class DeepQNetwork:
         # state = np.reshape(state, (1, *state.shape))
         act_values = self.model.predict(state)
 
-        print(f'choose action: {act_values[0]}')
+        chosen = np.argmax(act_values[0])
 
-        return np.argmax(act_values[0])
+        if chosen == 1:
+            print(f'Jump! Q: {act_values[0][1]}')
+            #print(f'choose action: {act_values[0]}')
+        else:
+            print(f'nothing Q: {act_values[0][0]}')
+
+        return chosen
 
     def create_minibatch(self):
         minibatch = random.sample(self.memory, self.batch_size)
@@ -116,19 +132,21 @@ class DeepQNetwork:
             x_prediction[i] = np.divide(memory.state, 255.0)
             next_state_stack = np.divide(next_state_stack, 255.0)
 
-            y_reality[i] = self.target_network.predict(state_stack)[0]
+            y_reality[i] = self.model.predict(state_stack)[0]
             best_q = np.max(self.target_network.predict(next_state_stack)[0])
 
             if memory.terminated:
-                #y_reality[i, memory.action_index] = memory.reward
-                reward = memory.reward
+                y_reality[i, memory.action_index] = memory.reward
+                #reward = memory.reward
             else:
-                #y_reality[i, memory.action_index] = memory.reward + self.gamma * best_q
-                reward = memory.reward + self.gamma * best_q
+                y_reality[i, memory.action_index] = memory.reward + self.gamma * best_q
+                #reward = memory.reward + self.gamma * best_q
+
+            #y_reality[i, memory.action_index] = reward
 
             # clip rewards
-            for j in range(self.actions):
-                y_reality[i, j] = max(1, min(reward, -1.0))
+            # for j in range(self.actions):
+            #     y_reality[i, j] = max(self.max_reward, min(reward, self.min_reward))
 
         return x_prediction, y_reality
 
@@ -150,63 +168,6 @@ class DeepQNetwork:
 
         #print(self.dlayer.get_weights())
 
-    # def replay(self):
-    #     if len(self.memory) < self.batch_size:
-    #         return
-    #
-    #     minibatch = random.sample(self.memory, self.batch_size)
-    #
-    #     #targets = np.zeros((self.batch_size, self.actions))
-    #
-    #     #input = []
-    #
-    #     for i, memory in enumerate(minibatch):
-    #         target_reward = memory.reward
-    #         #input.append(memory.state)
-    #
-    #         #minibatch[i] = np.reshape(memory.state, (1, self.frame_stack_depth, 80, 80, 3))
-    #         #minibatch[i] = memory.state
-    #         #minibatch = np.reshape(memory.state, (1, *memory.state.shape))
-    #
-    #         if not memory.terminated:
-    #             # using previous state stack and the next frame that resulted, construct future state
-    #             # to predict with
-    #             future_state_stack = memory.state
-    #             #future_state_stack = np.roll(future_state_stack, shift=3, axis=2)
-    #             #future_state_stack[:, :, 0:3] = memory.next_state
-    #             #future_state_stack = np.reshape(future_state_stack, (1, *future_state_stack.shape))
-    #
-    #             future_state_stack = np.roll(future_state_stack, shift=1, axis=0)
-    #             future_state_stack[0] = memory.next_state
-    #
-    #             prediction = self.model.predict(future_state_stack)[0]
-    #             amax = np.amax(prediction)
-    #
-    #             target_reward = memory.reward + self.gamma * np.amax(prediction)
-    #
-    #         # todo: normalize reward to [-1, 1] range?
-    #         prediction = self.model.predict(memory.state)
-    #         target_f = prediction[0]
-    #         target_f[memory.action_index] = target_reward
-    #
-    #         #targets[i] = target_f
-    #
-    #         target_f = np.array(target_f)
-    #         #target_f = np.reshape(target_f, (2,))
-    #
-    #         self.model.fit(memory.state, target_f, epochs=1, batch_size=self.batch_size, verbose=0)
-    #         #self.model.fit(minibatch, target_f, epochs=1, batch_size=self.batch_size, verbose=0)
-    #
-    #     # targets = np.array(targets)
-    #
-    #     #minibatch = np.array(minibatch)
-    #     #minibatch = np.concatenate(minibatch)
-    #     #minibatch = np.concatenate(input)
-    #     #self.model.train_on_batch(minibatch, targets)
-    #
-    #     #self.model.fit(minibatch, targets, epochs=1, verbose=0, batch_size=self.batch_size)
-    #
-    #     self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
     def save(self):
         self.model.save_weights("model.h5")

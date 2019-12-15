@@ -155,8 +155,39 @@ class FlappyBird:
 
         return 1.0 if r.contains(player_rect) else 0.0, r
 
+    def get_next_pipe(self):
+        self.lowerpipes.sort(key=lambda p: p['x'])
+        player_rect = pygame.Rect(self.playerx, self.playery, PLAYER_WIDTH, PLAYER_HEIGHT)
+
+        #pipe_width = IMAGES['pipe'][0].get_width()
+        pipe_width = PIPE_WIDTH
+
+        for pipe in self.lowerpipes:
+            if pipe['x'] + pipe_width < player_rect.left:
+                continue  # passed this pipe already, ignore
+
+            return pipe
+
+        return None
+
+    def get_next_pipe_gap_y(self):
+        #return self.get_next_pipe()['y'] + PIPE_HEIGHT + PIPEGAPSIZE / 2 # y of center gap
+        #return self.get_next_pipe()['y'] + PIPE_HEIGHT + PIPEGAPSIZE - self.playerMaxVelY - 10
+        #return self.get_next_pipe()['y'] + PIPE_HEIGHT + PIPEGAPSIZE - self.playerMaxVelY - 10
+        return self.get_next_pipe()['y'] - PLAYER_HEIGHT - 1
+
+    def get_next_pipe_gap_x(self):
+        return self.get_next_pipe()['x']
+
+    def get_bird_y(self):
+        return self.playery + PLAYER_HEIGHT / 2.
+
     def step_next_frame(self, jump=False, enforce_frame_rate=False):
-        pygame.event.pump()
+        #pygame.event.pump()
+        for evt in pygame.event.get():
+            if evt.type == KEYDOWN:
+                print('key')
+
         terminate = False
 
         # ip_actions[0] == 1: do nothing
@@ -203,13 +234,13 @@ class FlappyBird:
         if self.checkcrash(player=player_info, upperpipes=self.upperpipes, lowerpipes=self.lowerpipes):
             terminate = True
             self.__init__()
-            reward = -1.0
+            reward = -10.0
             #reward_rect = pygame.Rect(0, 0, 0, 0)
         else:
             # todo: see if nn can learn without this little bit of help
-            reward, reward_rect = self.calc_reward()
+            #reward, reward_rect = self.calc_reward()
 
-            #reward = 0.0
+            reward = 0.0
 
             # add score
             playermidpos = self.playerx + PLAYER_WIDTH / 2
@@ -218,7 +249,7 @@ class FlappyBird:
                 pipemidpos = pipe['x'] + PIPE_WIDTH / 2
                 if pipemidpos <= playermidpos < pipemidpos + 4:
                     self.score += 1
-                    reward = 1.0
+                    reward = 10
                     print('*** point ***')
 
                     break
@@ -232,9 +263,25 @@ class FlappyBird:
         # if not terminate:
         #     SCREEN.fill((255, 0, 0), reward_rect)
 
+
+
         for uPipe, lPipe in zip(self.upperpipes, self.lowerpipes):
             SCREEN.blit(IMAGES['pipe'][0], (uPipe['x'], uPipe['y']))
             SCREEN.blit(IMAGES['pipe'][1], (lPipe['x'], lPipe['y']))
+
+        # y = self.get_next_pipe_gap_y() - PIPEGAPSIZE / 2 # back to top
+        # r = pygame.Rect(self.get_next_pipe_gap_x(), y, PIPE_WIDTH, PIPEGAPSIZE)
+        # SCREEN.fill((255, 0, 0), r)
+
+        # visualize target line
+        y = self.get_next_pipe_gap_y()
+        r = pygame.Rect(self.get_next_pipe_gap_x(), y, PIPE_WIDTH, 4)
+        SCREEN.fill((255, 0, 0), r)
+
+        # visualize bottom of pipe
+        y = self.get_next_pipe()['y']
+        r.y = y
+        SCREEN.fill((255, 0, 255), r)
 
         SCREEN.blit(IMAGES['base'], (self.basex, BASEY))
 
@@ -285,8 +332,8 @@ class FlappyBird:
         """returns a randomly generated pipe"""
         # y of gap between upper and lower pipe
         #gapY = random.randrange(0, int(BASEY * 0.4 - PIPEGAPSIZE))
-        #fixed_gapy = [30, 40, 50, 60, 70, 80]
-        fixed_gapy = [70, 80, 90]
+        fixed_gapy = [30, 40, 50, 60, 70, 80]
+        #fixed_gapy = [150, 150, 150]
         
         index = random.randint(0, len(fixed_gapy) - 1)
         gapY = fixed_gapy[index]
