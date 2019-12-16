@@ -4,37 +4,46 @@ from keras.optimizers import Adam
 import numpy as np
 from collections import deque
 
-NUM_INPUTS = 3
+NUM_INPUTS = 4
 IDX_CURRENT_BIRD_Y = 0
-IDX_TARGET_GAP_Y = 1
+IDX_BIRD_Y_VELOCITY = 1
 IDX_NEXT_PIPE_EDGE_X = 2
+IDX_TARGET_GAP_Y = 3
+
+
+__all__ = ['FrameData', 'Brain']
 
 
 class FrameData:
-    __slots__ = ['frame', 'bird_y', 'gap_y', 'next_pipe_x']
+    __slots__ = ['bird_y',  'bird_y_velocity', 'next_pipe_x', 'gap_y']
 
-    def __init__(self, frame, bird_y, gap_y, next_pipe_x):
-        self.frame = frame
+    def __init__(self, bird_y, gap_y, next_pipe_x, bird_y_velocity):
         self.bird_y = bird_y
         self.gap_y = gap_y
         self.next_pipe_x = next_pipe_x
+        self.bird_y_velocity = bird_y_velocity
 
 
 class Brain:
-    def __init__(self, gap_size, bird_size, mem_size=20000, batch_size=1024, epochs=20):
+    def __init__(self, gap_size, bird_width, bird_height, bird_x_velocity, bird_x, pipe_width, bird_y_acc,
+                 mem_size=100000, batch_size=1024, epochs=20):
         # inputs: current bird y, target gap y, next pipe edge x
-        self.bird_size = bird_size
+        self.bird_x = bird_x
+        self.bird_width, self.bird_height = bird_width, bird_height
+        self.bird_x_velocity = bird_x_velocity
+        self.bird_y_acc = bird_y_acc
         self.gap_size = gap_size
         self.batch_size = batch_size
         self.epochs = epochs
+        self.pipe_width = pipe_width
 
         self.model = Sequential()
-        self.model.add(Dense(128, input_dim=NUM_INPUTS, name='inputs'))
+        self.model.add(Dense(256, input_dim=NUM_INPUTS, name='inputs'))
         self.model.add(Dropout(rate=0.25))
-        self.model.add(Dense(64, activation='relu'))
+        self.model.add(Dense(128, activation='sigmoid'))
         self.model.add(Dropout(rate=0.25))
         self.model.add(BatchNormalization())
-        self.model.add(Dense(64, activation='relu'))
+        self.model.add(Dense(128, activation='sigmoid'))
         self.model.add(BatchNormalization())
         self.model.add(Dropout(rate=0.25))
         self.model.add(Dense(2, name='outputs', activation='softmax'))
@@ -46,8 +55,14 @@ class Brain:
 
         self.memory = deque(maxlen=mem_size)
 
-    def should_jump(self, frame, current_bird_y, target_gap_y, next_pipe_x):
-        inputs = np.array([current_bird_y, target_gap_y, next_pipe_x])
+    def predict(self, frame_data):
+        # order matters
+        inputs = np.array([
+            (frame_data.bird_y - 256.0) / 10.0,
+            frame_data.bird_y_velocity,
+            frame_data.next_pipe_x / 10.0,
+            (frame_data.gap_y - 256.0) / 10.0
+        ])
         inputs = np.reshape(inputs, (1, *inputs.shape))
 
         act_values = self.model.predict(inputs)
@@ -71,13 +86,30 @@ class Brain:
         for i in range(len(self.memory)):
             data = self.memory[i]  # type: FrameData
 
-            inputs[i][IDX_CURRENT_BIRD_Y] = data.bird_y
-            inputs[i][IDX_TARGET_GAP_Y] = data.gap_y
-            inputs[i][IDX_NEXT_PIPE_EDGE_X] = data.next_pipe_x
+            # normalizing input data lead to substantial improvement
+            inputs[i][IDX_CURRENT_BIRD_Y] = (data.bird_y - 256.0) / 10.0
+            inputs[i][IDX_BIRD_Y_VELOCITY] = data.bird_y_velocity
+            inputs[i][IDX_NEXT_PIPE_EDGE_X] = data.next_pipe_x / 10.0
+            inputs[i][IDX_TARGET_GAP_Y] = (data.gap_y - 256.0) / 10.0
 
-            y[i] = jump if data.bird_y + self.bird_size >= data.gap_y + self.gap_size * 0.5 else wait
+            # only need to jump if we won't pass this pipe in time
+            if data.next_pipe_x + self.pipe_width + self.bird_x_velocity <= self.bird_x:
+                will_hit = False
+            else:
+                will_hit = data.bird_y + self.bird_height + data.bird_y_velocity + self.bird_y_acc + 1>= \
+                    data.gap_y + self.gap_size * 0.5
+
+            y[i] = jump if will_hit else wait
 
         self.model.fit(inputs, y, batch_size=self.batch_size, epochs=self.epochs, shuffle=True, verbose=True)
 
-    def store_memory(self, frame, bird_y, gap_y, next_pipe_x):
-        self.memory.append(FrameData(frame, bird_y, gap_y, next_pipe_x))
+    def store_memory(self, frame_data):
+        self.memory.append(frame_data)
+
+    def save(self, filename=None):
+        self.model.save_weights(filename or "model.h5")
+        print("Model saved")
+
+    def load(self, filename=None):
+        self.model.load_weights(filename or "model.h5")
+        print("Model loaded")
