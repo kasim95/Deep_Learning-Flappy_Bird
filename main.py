@@ -15,7 +15,7 @@ def train(save_video_of_best=False):
                   bird_y_acc=game.playerAccY,
                   bird_x=game.playerx,
                   gap_size=PIPEGAPSIZE, pipe_width=PIPE_WIDTH,
-                  mem_size=1000000)
+                  mem_size=100000)
 
     try:
         brain.load()
@@ -77,6 +77,9 @@ def train(save_video_of_best=False):
 
                 if frame_counter % 1000 == 0:
                     brain.learn()
+
+                if frame_counter % 10000 == 0:
+                    brain.save()
 
             print(f'Finished game {game_counter}: score was {current_score}; best so far is {best_score}')
             brain.learn()
